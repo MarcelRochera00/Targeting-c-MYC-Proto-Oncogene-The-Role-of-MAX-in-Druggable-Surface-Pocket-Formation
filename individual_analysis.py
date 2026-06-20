@@ -47,11 +47,10 @@ TRAJS = [
 ]
 
 # Optional: Reference structure for RMSD (crystal or first frame)
-# CRYSTAL_PDB = "MYC-MAX/MYC-MAX-1000/charmm-gui/gromacs/myc_crystal.pdb"
-CRYSTAL_PDB = None 
+CRYSTAL_PDB = "MYC-MAX/MYC-MAX-1000/charmm-gui/gromacs/myc_crystal.pdb"
+#CRYSTAL_PDB = None 
 
 OUT       = "Results/Individual"
-SEL_CA    = "backbone and name CA"
 COLORS    = ["#e74c3c", "#2ecc71", "#3498db"]
 STRIDE    = 1
 DT_PS     = 100 # ps between frames
@@ -62,42 +61,61 @@ os.makedirs(OUT, exist_ok=True)
 # HELPERS
 # =============================================================================
 
-def frames_to_ns(n_frames, ps_per_frame=DT_PS):
-    return np.arange(n_frames) * ps_per_frame / 1000
+def trajectory_time_ns(u):
+    return np.array(
+        [ts.time for ts in u.trajectory]
+    ) / 1000.0
 
 # =============================================================================
 # ANALYSIS FUNCTIONS
 # =============================================================================
 
-def analyze_rmsd(u, sel_ca, ref_positions=None):
-    """Compute RMSD vs reference (crystal or first frame)."""
-    ca = u.select_atoms(sel_ca)
-    if ref_positions is None:
-        ref_positions = ca.positions.copy()
-    
-    rmsd_vals = []
-    for ts in u.trajectory[::STRIDE]:
-        # Simple RMSD without alignment (assuming trajectory is pre-aligned or we align per frame)
-        # For standard RMSD, we usually align to reference first
-        val = np.sqrt(np.mean((ca.positions - ref_positions) ** 2))
-        rmsd_vals.append(val)
-    return np.array(rmsd_vals)
+def analyze_rmsd(u, ref_u):
+    """
+    Backbone RMSD against crystal reference.
+    """
 
-def analyze_rmsf(u, sel_ca):
-    """Compute per-residue RMSF after aligning to the first frame."""
-    align.AlignTraj(u, u, select=sel_ca, in_memory=True).run()
-    ca = u.select_atoms(sel_ca)
+    rmsd_obj = rms.RMSD(
+        u,
+        ref_u,
+        select="backbone"
+    ).run()
+
+    return rmsd_obj.results.rmsd[:, 2]
+
+def analyze_rmsf(u):
+    """
+    CA RMSF after backbone alignment.
+    """
+
+    align.AlignTraj(
+        u,
+        u,
+        select="backbone",
+        in_memory=True
+    ).run()
+
+    ca = u.select_atoms("name CA")
+
     rmsf_obj = rms.RMSF(ca).run()
+
     return rmsf_obj.results.rmsf, ca.resids
 
-def analyze_rg(u, sel_ca):
-    """Compute Radius of Gyration over time."""
-    ca = u.select_atoms(sel_ca)
-    rg_vals = []
-    for ts in u.trajectory[::STRIDE]:
-        rg_vals.append(ca.radius_of_gyration())
-    return np.array(rg_vals)
+def analyze_rg(u):
+    """
+    Whole-protein radius of gyration.
+    """
 
+    protein = u.select_atoms("protein")
+
+    rg_vals = []
+
+    for ts in u.trajectory[::STRIDE]:
+        rg_vals.append(
+            protein.radius_of_gyration()
+        )
+
+    return np.array(rg_vals)
 # =============================================================================
 # MAIN EXECUTION
 # =============================================================================
@@ -106,33 +124,32 @@ results = {"rmsd": [], "rmsf": [], "rg": [], "resids": None, "time": None}
 
 for i, xtc in enumerate(TRAJS):
     print(f"Processing Replica {i+1}: {xtc}")
-    u = mda.Universe(PSF_FILE, xtc)
+    u_rmsd = mda.Universe(PSF_FILE, xtc)
+    u_rmsf = mda.Universe(PSF_FILE, xtc)
+    u_rg   = mda.Universe(PSF_FILE, xtc)
     
     if 1 in RUN:
-        # If CRYSTAL_PDB provided, align and compute vs crystal
-        if CRYSTAL_PDB and os.path.exists(CRYSTAL_PDB):
-            u_ref = mda.Universe(CRYSTAL_PDB)
-            ref_pos = u_ref.select_atoms(SEL_CA).positions
-            # Alignment to crystal
-            align.AlignTraj(u, u_ref, select=SEL_CA, in_memory=True).run()
-            results["rmsd"].append(analyze_rmsd(u, SEL_CA, ref_pos))
-        else:
-            # Align to first frame
-            u.trajectory[0]
-            ref_pos = u.select_atoms(SEL_CA).positions.copy()
-            align.AlignTraj(u, u, select=SEL_CA, in_memory=True).run()
-            results["rmsd"].append(analyze_rmsd(u, SEL_CA, ref_pos))
+        ref_u = mda.Universe(
+            PSF_FILE,
+            CRYSTAL_PDB
+        )
+
+        results["rmsd"].append(
+            analyze_rmsd(u_rmsd, ref_u)
+        )
             
     if 2 in RUN:
-        rmsf, resids = analyze_rmsf(u, SEL_CA)
+        rmsf, resids = analyze_rmsf(u_rmsf)
         results["rmsf"].append(rmsf)
         results["resids"] = resids
         
     if 3 in RUN:
-        results["rg"].append(analyze_rg(u, SEL_CA))
+        results["rg"].append(
+            analyze_rg(u_rg)
+        )
         
     if results["time"] is None:
-        results["time"] = frames_to_ns(len(u.trajectory))
+        results["time"] = trajectory_time_ns(u_rmsd)
 
 # =============================================================================
 # PLOTTING
@@ -175,4 +192,234 @@ if 3 in RUN:
     plt.savefig(f"{OUT}/03_rg.png", dpi=300)
     plt.close()
 
+
+
+# =============================================================================
+# COMBINED PLOT
+# =============================================================================
+
+sns.set_style("whitegrid")
+
+fig, axes = plt.subplots(
+    3,
+    1,
+    figsize=(14, 14),
+    constrained_layout=True
+)
+
+rep_colors = [
+    "#8ecae6",   # light blue
+    "#f4a340",   # orange
+    "#c8a2d9"    # lavender
+]
+
+mean_color = "#2b2d42"
+
+rep_labels = [
+    "Replica 1 (500ps eq)",
+    "Replica 2 (1000ps eq)",
+    "Replica 3 (1500ps eq)"
+]
+
+ax = axes[0]
+
+rmsd_arr = np.array(results["rmsd"])
+
+mean_rmsd = rmsd_arr.mean(axis=0)
+std_rmsd = rmsd_arr.std(axis=0)
+
+for i, y in enumerate(rmsd_arr):
+    ax.plot(
+        results["time"],
+        y,
+        color=rep_colors[i],
+        alpha=0.75,
+        linewidth=1,
+        label=rep_labels[i]
+    )
+
+ax.fill_between(
+    results["time"],
+    mean_rmsd - std_rmsd,
+    mean_rmsd + std_rmsd,
+    color="lightgray",
+    alpha=0.5,
+    label="± SD"
+)
+
+ax.plot(
+    results["time"],
+    mean_rmsd,
+    color=mean_color,
+    linewidth=4,
+    label=f"Mean: {mean_rmsd.mean():.2f} Å"
+)
+
+ax.set_title(
+    "RMSD vs Crystal State - Three Replicas",
+    fontsize=18,
+    fontweight="bold"
+)
+
+ax.set_xlabel("Time (ns)")
+ax.set_ylabel("RMSD (Å)")
+ax.legend(loc="lower right")
+
+ax = axes[1]
+
+rmsf_arr = np.array(results["rmsf"])
+
+mean_rmsf = rmsf_arr.mean(axis=0)
+std_rmsf = rmsf_arr.std(axis=0)
+
+for i, y in enumerate(rmsf_arr):
+    ax.plot(
+        results["resids"],
+        y,
+        color=rep_colors[i],
+        alpha=0.75,
+        linewidth=1,
+        label=rep_labels[i]
+    )
+
+ax.fill_between(
+    results["resids"],
+    mean_rmsf - std_rmsf,
+    mean_rmsf + std_rmsf,
+    color="lightgray",
+    alpha=0.5,
+    label="± SD"
+)
+
+ax.plot(
+    results["resids"],
+    mean_rmsf,
+    color=mean_color,
+    linewidth=2.5,
+    label=f"Mean: {mean_rmsf.mean():.2f} Å"
+)
+
+ax.axhline(
+    3.0,
+    linestyle="--",
+    color="#d9534f",
+    label="High flexibility (3 Å)"
+)
+
+ax.set_title(
+    "Per-Residue Flexibility - Three Replicas",
+    fontsize=18,
+    fontweight="bold"
+)
+
+ax.set_xlabel("Residue Number")
+ax.set_ylabel("RMSF (Å)")
+ax.legend(loc="upper right")
+
+ax = axes[2]
+
+rg_arr = np.array(results["rg"])
+
+mean_rg = rg_arr.mean(axis=0)
+std_rg = rg_arr.std(axis=0)
+
+for i, y in enumerate(rg_arr):
+    ax.plot(
+        results["time"],
+        y,
+        color=rep_colors[i],
+        alpha=0.75,
+        linewidth=1,
+        label=rep_labels[i]
+    )
+
+ax.fill_between(
+    results["time"],
+    mean_rg - std_rg,
+    mean_rg + std_rg,
+    color="lightgray",
+    alpha=0.5,
+    label="± SD"
+)
+
+ax.plot(
+    results["time"],
+    mean_rg,
+    color=mean_color,
+    linewidth=2.5,
+    label=f"Mean: {mean_rg.mean():.2f} Å"
+)
+
+ax.set_title(
+    "Radius of Gyration - Three Replicas",
+    fontsize=18,
+    fontweight="bold"
+)
+
+ax.set_xlabel("Time (ns)")
+ax.set_ylabel("Rg (Å)")
+ax.legend(loc="upper right")
+
+plt.savefig(
+    f"{OUT}/combined_three_replica_analysis.png",
+    dpi=300,
+    bbox_inches="tight"
+)
+
+plt.close()
+
+with open(f"{OUT}/analysis_statistics.txt", "w") as f:
+
+    f.write("MYC THREE-REPLICA ANALYSIS\n")
+    f.write("=" * 60 + "\n\n")
+
+    for i in range(3):
+
+        f.write(f"Replica {i+1}\n")
+        f.write("-" * 20 + "\n")
+
+        if results["rmsd"]:
+            f.write(
+                f"RMSD mean = {np.mean(results['rmsd'][i]):.3f} Å\n"
+            )
+            f.write(
+                f"RMSD std  = {np.std(results['rmsd'][i]):.3f} Å\n"
+            )
+
+        if results["rg"]:
+            f.write(
+                f"Rg mean   = {np.mean(results['rg'][i]):.3f} Å\n"
+            )
+            f.write(
+                f"Rg std    = {np.std(results['rg'][i]):.3f} Å\n"
+            )
+
+        if results["rmsf"]:
+            f.write(
+                f"RMSF mean = {np.mean(results['rmsf'][i]):.3f} Å\n"
+            )
+            f.write(
+                f"RMSF std  = {np.std(results['rmsf'][i]):.3f} Å\n"
+            )
+
+        f.write("\n")
+
+    f.write("=" * 60 + "\n")
+
+    f.write(
+        f"Global RMSD mean ± SD = "
+        f"{mean_rmsd.mean():.3f} ± {std_rmsd.mean():.3f} Å\n"
+    )
+
+    f.write(
+        f"Global RMSF mean ± SD = "
+        f"{mean_rmsf.mean():.3f} ± {std_rmsf.mean():.3f} Å\n"
+    )
+
+    f.write(
+        f"Global Rg mean ± SD = "
+        f"{mean_rg.mean():.3f} ± {std_rg.mean():.3f} Å\n"
+    )
+    
+    
 print(f"\nAnalysis complete. Results saved in '{OUT}/'")

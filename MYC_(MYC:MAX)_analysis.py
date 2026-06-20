@@ -32,7 +32,7 @@ CONDITIONS = {
         "label":         "MYC alone",
         # whole system is MYC only, so both selections are identical
         "ca_selection":  "backbone and name CA",
-        "rg_selection":  "backbone and name CA",
+        "rg_selection": "protein",
     },
     "MYC:MAX isolated MYC": {
         "replicas": [
@@ -70,15 +70,15 @@ REPLICA_ALPHAS = [0.55, 0.45, 0.35]
 #                     SECTION 1 — RMSD
 # ============================================================
 
-def compute_rmsd(u, ca_sel, ref_positions, stride):
-    """Frame-by-frame RMSD of Ca atoms vs crystal reference positions."""
-    ca = u.select_atoms(ca_sel)
-    rmsd_vals = []
-    for ts in u.trajectory[::stride]:
-        val = np.sqrt(np.mean((ca.positions - ref_positions) ** 2))
-        rmsd_vals.append(val)
-    return np.array(rmsd_vals)
+def compute_rmsd(u, ref):
+    print("RMSD atoms:", len(u.select_atoms("backbone")))
+    rmsd_obj = rms.RMSD(
+        u,
+        ref,
+        select="backbone"
+    ).run()
 
+    return rmsd_obj.results.rmsd[:, 2]
 
 def plot_rmsd(ax, results_dict):
     """Plot RMSD for all conditions on a single axis."""
@@ -109,13 +109,18 @@ def plot_rmsd(ax, results_dict):
 #                     SECTION 2 — RMSF
 # ============================================================
 
-def compute_rmsf(u, ca_sel):
-    """Per-residue RMSF over all frames, aligned to the first frame of this trajectory."""
-    # Re-align to the trajectory's own first frame so RMSF reflects
-    # internal fluctuations, not deviation from the crystal state.
-    align.AlignTraj(u, u, select=ca_sel, in_memory=True).run()
-    ca = u.select_atoms(ca_sel)
+def compute_rmsf(u):
+    align.AlignTraj(
+        u,
+        u,
+        select="backbone",
+        in_memory=True
+    ).run()
+
+    ca = u.select_atoms("name CA")
+
     rmsf_obj = rms.RMSF(ca).run()
+
     return rmsf_obj.results.rmsf, ca.resids
 
 
@@ -197,7 +202,6 @@ def process_condition(cond_name, cond_cfg):
     # Load crystal reference
     print("  Loading crystal state reference...")
     ref = mda.Universe(cond_cfg["crystal_psf"], cond_cfg["crystal_pdb"])
-    ref_positions = ref.select_atoms(cond_cfg["ca_selection"]).positions.copy()
 
     all_rmsd, all_rmsf, all_rg = [], [], []
     residues = None
@@ -212,8 +216,7 @@ def process_condition(cond_name, cond_cfg):
                         in_memory=True).run()
 
         # RMSD — requires crystal-state alignment (done above)
-        rmsd_vals = compute_rmsd(u, cond_cfg["ca_selection"],
-                                 ref_positions, STRIDE)
+        rmsd_vals = compute_rmsd(u, ref)
         all_rmsd.append(rmsd_vals)
 
         # Rg — no alignment dependency, compute before RMSF re-aligns
@@ -222,7 +225,7 @@ def process_condition(cond_name, cond_cfg):
 
         # RMSF — must come last: internally re-aligns to first frame of
         # this trajectory, overwriting the in-memory crystal alignment.
-        rmsf_vals, res_ids = compute_rmsf(u, cond_cfg["ca_selection"])
+        rmsf_vals, res_ids = compute_rmsf(u)
         all_rmsf.append(rmsf_vals)
         if residues is None:
             residues = res_ids
@@ -255,9 +258,8 @@ def build_figure(results_dict):
     plot_rg  (ax_rg,   results_dict)
 
     fig.suptitle(
-        "MYC alone vs MYC:MAX — MD Trajectory Comparison\n"
-        "(Ca atoms, 3 replicas each, vs crystal state)",
-        fontsize=14, fontweight="bold", y=1.01
+    "MYC alone vs MYC:MAX — MD Trajectory Comparison\n"
+    "(3 replicas each, crystal-state referenced)"
     )
 
     plt.savefig(OUTPUT_PLOT, dpi=300, bbox_inches="tight")
@@ -341,7 +343,7 @@ if __name__ == "__main__":
     results = {}
     for cond_name, cond_cfg in CONDITIONS.items():
         results[cond_name] = process_condition(cond_name, cond_cfg)
-
+    
     # Section 5: build and save figure
     build_figure(results)
 

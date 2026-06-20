@@ -2,7 +2,7 @@
 """
 MYC-MAX Complex Analysis (Step 2 in Workflow)
 =============================================
-Analyses: RMSD, RMSF, Interface Contacts, MM-GBSA + Hotspots, Salt Bridges.
+Analyses: Interface Contacts, MM-GBSA, Salt Bridges.
 Requires: PSF and XTC files for complex replicas.
 Outputs: Results/Complex/
 """
@@ -24,19 +24,17 @@ from MDAnalysis.analysis.distances import distance_array
 # SELECT ANALYSES TO RUN
 # =============================================================================
 print("\nSelect analyses to run (leave blank to run all):")
-print("  1. RMSD")
-print("  2. RMSF")
-print("  3. Interface Contacts")
-print("  4. MM-GBSA + Hotspot Decomposition")
-print("  5. Salt Bridge Occupancy")
+print("  1. Interface Contacts")
+print("  2. MM-GBSA + Hotspot Decomposition")
+print("  3. Salt Bridge Occupancy")
 print("Enter numbers separated by commas (e.g. 1,3) or press Enter for all: ")
 _selection = input().strip()
 
 try:
-    RUN = {1, 2, 3, 4, 5} if _selection == "" else set(int(x.strip()) for x in _selection.split(","))
+    RUN = {1, 2, 3} if _selection == "" else set(int(x.strip()) for x in _selection.split(","))
 except ValueError:
     print("  Invalid input — running all analyses.")
-    RUN = {1, 2, 3, 4, 5}
+    RUN = {1, 2, 3}
 
 print(f"  → Running: {', '.join(str(x) for x in sorted(RUN))}\n")
 
@@ -204,114 +202,10 @@ def label_residue(res_raw):
 
 
 # =============================================================================
-# 1. RMSD
+# 1. Interface Contacts
 # =============================================================================
 if 1 in RUN:
-    print("\n[1/5] Calculating RMSD...")
-    try:
-        fig, axes = plt.subplots(2, 1, figsize=(13, 9))
-
-        for i, (traj, eq) in enumerate(zip(TRAJS, EQUIL)):
-            try:
-                u   = mda.Universe(PSF_FILE, traj)
-                ref = mda.Universe(CRYSTAL_PSF, CRYSTAL_PDB)
-
-                align.AlignTraj(u, ref, select=SEL_ALL, in_memory=True).run()
-
-                myc_ref  = ref.select_atoms(SEL_MYC)
-                max_ref  = ref.select_atoms(SEL_MAX)
-                myc_traj = u.select_atoms(SEL_MYC)
-                max_traj = u.select_atoms(SEL_MAX)
-
-                rmsd_myc, rmsd_max = [], []
-                for ts in u.trajectory:
-                    rmsd_myc.append(np.sqrt(np.mean((myc_traj.positions - myc_ref.positions)**2)))
-                    rmsd_max.append(np.sqrt(np.mean((max_traj.positions - max_ref.positions)**2)))
-
-                time  = frames_to_ns(len(rmsd_myc))
-                label = f"Rep {i+1} (eq {eq}ps)"
-                axes[0].plot(time, rmsd_myc, color=COLORS[i], linewidth=0.8, alpha=0.85, label=label)
-                axes[1].plot(time, rmsd_max, color=COLORS[i], linewidth=0.8, alpha=0.85, label=label)
-
-                print(f"  Rep {i+1} — MYC RMSD: {np.mean(rmsd_myc):.2f} ± {np.std(rmsd_myc):.2f} Å | "
-                      f"MAX RMSD: {np.mean(rmsd_max):.2f} ± {np.std(rmsd_max):.2f} Å")
-            except Exception as e:
-                print(f"  ✗ Rep {i+1} RMSD failed: {e}")
-                continue
-
-        for ax, title in zip(axes, ["MYC (PROA) — RMSD vs crystal state",
-                                      "MAX (PROB) — RMSD vs crystal state"]):
-            ax.set_ylabel("RMSD (Å)", fontsize=11)
-            ax.set_title(title, fontsize=12, fontweight="bold")
-            ax.legend(fontsize=9)
-            ax.grid(alpha=0.3)
-
-        axes[-1].set_xlabel("Time (ns)", fontsize=11)
-        plt.suptitle("Individual RMSD — MYC-MAX Complex (3 replicas)", fontsize=13, y=1.01)
-        plt.tight_layout()
-        plt.savefig(f"{OUT}/01_rmsd.png", dpi=150)
-        plt.close()
-        print(f"  → Saved {OUT}/01_rmsd.png")
-    except Exception as e:
-        print(f"  ✗ RMSD section failed: {e}")
-
-
-# =============================================================================
-# 2. RMSF
-# =============================================================================
-if 2 in RUN:
-    print("\n[2/5] Calculating RMSF...")
-    try:
-        fig, axes = plt.subplots(2, 1, figsize=(13, 9))
-
-        for i, (traj, eq) in enumerate(zip(TRAJS, EQUIL)):
-            try:
-                u = mda.Universe(PSF_FILE, traj)
-
-                u.trajectory[0]
-                ref = mda.Universe(PSF_FILE, traj)
-                ref.trajectory[0]
-
-                align.AlignTraj(u, ref, select=SEL_ALL, in_memory=True).run()
-
-                myc_atoms = u.select_atoms(SEL_MYC)
-                max_atoms = u.select_atoms(SEL_MAX)
-
-                rmsf_myc = rms.RMSF(myc_atoms).run().results.rmsf
-                rmsf_max = rms.RMSF(max_atoms).run().results.rmsf
-
-                label = f"Rep {i+1} (eq {eq}ps)"
-                axes[0].plot(myc_atoms.resids, rmsf_myc, color=COLORS[i], linewidth=1.2, alpha=0.85, label=label)
-                axes[1].plot(max_atoms.resids, rmsf_max, color=COLORS[i], linewidth=1.2, alpha=0.85, label=label)
-                print(f"  Rep {i+1} RMSF done")
-            except Exception as e:
-                print(f"  ✗ Rep {i+1} RMSF failed: {e}")
-                continue
-
-        for ax, title in zip(axes, ["MYC (PROA) — Per-residue RMSF",
-                                      "MAX (PROB) — Per-residue RMSF"]):
-            ax.axhline(3.0, color="red", linestyle="--", alpha=0.5, linewidth=1, label="High flexibility (3 Å)")
-            ax.set_ylabel("RMSF (Å)", fontsize=11)
-            ax.set_title(title, fontsize=12, fontweight="bold")
-            ax.legend(fontsize=9)
-            ax.grid(alpha=0.3)
-
-        axes[0].set_xlabel("MYC Residue number", fontsize=11)
-        axes[1].set_xlabel("MAX Residue number", fontsize=11)
-        plt.suptitle("Per-residue RMSF — MYC-MAX Complex (3 replicas, ref = first frame)", fontsize=13, y=1.01)
-        plt.tight_layout()
-        plt.savefig(f"{OUT}/02_rmsf.png", dpi=150)
-        plt.close()
-        print(f"  → Saved {OUT}/02_rmsf.png")
-    except Exception as e:
-        print(f"  ✗ RMSF section failed: {e}")
-
-
-# =============================================================================
-# 3. Interface Contacts
-# =============================================================================
-if 3 in RUN:
-    print("\n[3/5] Calculating interface contacts...")
+    print("\n[1/3] Calculating interface contacts...")
     try:
         fig, ax = plt.subplots(figsize=(13, 5))
         all_contacts = []
@@ -374,10 +268,10 @@ if 3 in RUN:
 
 
 # =============================================================================
-# 4. MM-GBSA + Hotspot Decomposition
+# 2. MM-GBSA + Hotspot Decomposition
 # =============================================================================
-if 4 in RUN:
-    print("\n[4/5] Running MM-GBSA + Hotspot Decomposition...")
+if 2 in RUN:
+    print("\n[2/3] Running MM-GBSA + Hotspot Decomposition...")
 
     # KEY FIXES vs previous version:
     #   igb=2    — GBHCT model; validated for charged PPIs. igb=5 (OBC2) was
@@ -643,10 +537,10 @@ dec_verbose=3,
 
 
 # =============================================================================
-# 5. Salt Bridge Occupancy
+# 3. Salt Bridge Occupancy
 # =============================================================================
-if 5 in RUN:
-    print("\n[5/5] Calculating inter-chain salt bridge occupancy...")
+if 3 in RUN:
+    print("\n[3/3] Calculating inter-chain salt bridge occupancy...")
 
     # Positive residues: Arg (NH1/NH2), Lys (NZ), His (ND1/NE2)
     # Negative residues: Asp (OD1/OD2), Glu (OE1/OE2)
@@ -856,405 +750,6 @@ if 5 in RUN:
         print("  ✗ No salt bridges found above threshold in any replica — "
               "consider lowering SALT_OCCUPANCY or checking segid assignments.")
 
-
-
-# =============================================================================
-# HELPER — add this near parse_mmpbsa_csv / parse_decomp_csv at the top
-# of your existing script.
-# =============================================================================
-def parse_alascan_dat(filepath):
-    """Returns ΔΔG as a single float from a one-residue alanine scan .dat file."""
-    with open(filepath) as fh:
-        for line in fh:
-            stripped = line.strip()
-            if not stripped or stripped.startswith("=") or stripped.startswith("-"):
-                continue
-            parts = stripped.split()
-            if len(parts) >= 2:
-                try:
-                    return float(parts[1])
-                except ValueError:
-                    continue
-    return None
-
-# =============================================================================
-# 6. Alanine Scanning (Hotspot Validation)
-# =============================================================================
-if 6 in RUN:
-    print("\n[6/6] Running Alanine Scanning (Hotspot Validation)...")
-
-    # -------------------------------------------------------------------------
-    # 6a. Gather candidate hotspots from Section 4 decomposition results
-    # -------------------------------------------------------------------------
-    if "decomp_results" not in dir() or not decomp_results:
-        decomp_results = []
-        for i in range(1, len(TPR_FILES) + 1):
-            decomp_file = os.path.join(OUT, f"mmpbsa_rep{i}", "DECOMP_RESULTS.csv")
-            if os.path.exists(decomp_file):
-                decomp = parse_decomp_csv(decomp_file)
-                if decomp:
-                    decomp_results.append(decomp)
-                    print(f"  ✓ Loaded replica {i} from disk ({len(decomp)} residues)")
-            else:
-                print(f"  ✗ Not found: {decomp_file}")
-
-    if not decomp_results:
-        print("  ✗ No decomp data found — check that OUT points to myc_max_results/")
-    else:
-        # Rebuild consensus dict (mirrors Section 4 logic)
-        all_residues_scan = set()
-        for d in decomp_results:
-            all_residues_scan.update(d.keys())
-
-        consensus_scan = {}
-        for res in all_residues_scan:
-            vals = [d[res] for d in decomp_results if res in d]
-            if len(vals) >= max(1, len(decomp_results) - 1):
-                consensus_scan[res] = (np.mean(vals), np.std(vals))
-
-        if not consensus_scan:
-            print("  ⚠ No residues found in ≥2 replicas — using single-replica results")
-            for res in all_residues_scan:
-                vals = [d[res] for d in decomp_results if res in d]
-                consensus_scan[res] = (np.mean(vals), np.std(vals))
-
-        # Pick top N hotspots (most negative mean contribution)
-        sorted_consensus_scan = sorted(consensus_scan.items(), key=lambda x: x[1][0])
-        scan_candidates = sorted_consensus_scan[:TOP_N_HOTSPOTS]
-
-        print(f"\n  Candidate hotspots selected for alanine scan ({len(scan_candidates)} residues):")
-        for r, (mv, sv) in scan_candidates:
-            _, prot = label_residue(r)
-            print(f"    {r:<30s}  [{prot}]  ΔG = {mv:.2f} ± {sv:.2f} kcal/mol")
-
-        # -------------------------------------------------------------------------
-        # 6b. Helpers
-        # -------------------------------------------------------------------------
-        CHAIN_MAP = {"MYC": "A", "MAX": "B"}   # ← edit if your chains differ
-
-        def extract_resnum(label):
-            import re
-            nums = re.findall(r'\d+', label)
-            return int(nums[-1]) if nums else None
-
-        # -------------------------------------------------------------------------
-        # 6c. Run one gmx_MMPBSA alanine scan per residue per replica
-        #     gmx_MMPBSA only allows ONE mutant residue per run.
-        # -------------------------------------------------------------------------
-        alascan_results = []   # one dict per replica: {residue_label: ddG_float}
-
-        for i, (tpr, xtc, topol, eq) in enumerate(zip(TPR_FILES, TRAJS, TOPOL_FILES, EQUIL)):
-            print(f"\n  Replica {i+1} — alanine scan started "
-                  f"at {datetime.datetime.now().strftime('%H:%M:%S')}")
-            rep_ddg = {}
-
-            for r, _ in scan_candidates:
-                _, prot  = label_residue(r)
-                chain    = CHAIN_MAP.get(prot, "A")
-                resnum   = extract_resnum(r)
-                if resnum is None:
-                    print(f"    {r}: ⚠ could not extract residue number — skipping")
-                    continue
-
-                single_res = f"{chain}/{resnum}"
-                safe_label = r.replace(":", "_").replace(" ", "_")
-
-                ALASCAN_INPUT = f"""\
-&general
-   startframe=1, interval=50,
-   verbose=2,
-   int_dielectric=4.0,  # Match the decomposition setting
-/
-&pb
-   istrng=0.15,
-   ratio=1.5,
-   fillratio=4.0,
-/
-&alanine_scanning
-   mutant='ALA',
-   mutant_res="{single_res}",
-/
-"""
-                res_dir = os.path.abspath(f"{OUT}/alascan_rep{i+1}/{safe_label}")
-                os.makedirs(res_dir, exist_ok=True)
-
-                inp_file = f"{res_dir}/alascan.in"
-                with open(inp_file, "w") as f:
-                    f.write(ALASCAN_INPUT)
-
-                cmd = [
-                    "mpirun", "-np", "8", "--allow-run-as-root",
-                    "gmx_MMPBSA", "MPI", "-O",
-                    "-i",  inp_file,
-                    "-cs", os.path.abspath(tpr),
-                    "-ct", os.path.abspath(xtc),
-                    "-ci", INDEX_FILE,
-                    "-cg", "16", "17",
-                    "-cp", os.path.abspath(topol),
-                    "-o",  f"{res_dir}/FINAL_ALASCAN.dat",
-                    "-eo", f"{res_dir}/FINAL_ALASCAN.csv",
-                ]
-
-                try:
-                    result = subprocess.run(cmd, capture_output=True, text=True,
-                                            timeout=25200, env=os.environ.copy())
-                    dat_file = f"{res_dir}/FINAL_ALASCAN.dat"
-                    if os.path.exists(dat_file):
-                        ddg_val = parse_alascan_dat(dat_file)
-                        if ddg_val is not None:
-                            rep_ddg[r] = ddg_val
-                            flag = " ★ HOTSPOT" if ddg_val >= 2.0 else ""
-                            print(f"    {r}: ΔΔG = {ddg_val:+.2f} kcal/mol{flag}")
-                        else:
-                            print(f"    {r}: ✗ output exists but could not parse ΔΔG")
-                            print(result.stderr[-300:])
-                    else:
-                        print(f"    {r}: ✗ no output file — {result.stderr[-200:]}")
-
-                except subprocess.TimeoutExpired:
-                    print(f"    {r}: ✗ timed out")
-                    dat_file = f"{res_dir}/FINAL_ALASCAN.dat"
-                    if os.path.exists(dat_file):
-                        ddg_val = parse_alascan_dat(dat_file)
-                        if ddg_val is not None:
-                            rep_ddg[r] = ddg_val
-                            print(f"    {r}: ~ partial — ΔΔG = {ddg_val:+.2f} kcal/mol")
-                except Exception as e:
-                    print(f"    {r}: ✗ error — {e}")
-
-                for tmp in glob.glob(os.path.join(PROJECT_ROOT, "_GMXMMPBSA_*")):
-                    try:
-                        os.remove(tmp)
-                    except Exception:
-                        pass
-
-            if rep_ddg:
-                alascan_results.append(rep_ddg)
-                print(f"  ✓ Replica {i+1} complete — "
-                      f"{len(rep_ddg)}/{len(scan_candidates)} residues parsed")
-            else:
-                print(f"  ✗ Replica {i+1} — no results collected")
-
-            sys.stdout.flush()
-
-        # =====================================================================
-        # PLOTS
-        # =====================================================================
-        if not alascan_results:
-            print("\n  ✗ No alanine scanning results to plot.")
-        else:
-            import matplotlib.lines as mlines
-            from scipy.stats import zscore, pearsonr, spearmanr
-
-            HOTSPOT_DDG_THRESH = 2.0
-
-            # -----------------------------------------------------------------
-            # PLOT 6a — Per-replica ΔΔG bar charts
-            # -----------------------------------------------------------------
-            for i, ddg_dict in enumerate(alascan_results):
-                if not ddg_dict:
-                    continue
-                sorted_ddg = sorted(ddg_dict.items(), key=lambda x: -x[1])
-                labels_a   = [r for r, _ in sorted_ddg]
-                values_a   = [v for _, v in sorted_ddg]
-                colors_a   = ["#e74c3c" if label_residue(l)[1] == "MYC"
-                               else "#3498db" if label_residue(l)[1] == "MAX"
-                               else "#95a5a6" for l in labels_a]
-
-                fig, ax = plt.subplots(figsize=(12, 6))
-                ax.barh(range(len(labels_a)), values_a, color=colors_a,
-                        edgecolor="k", linewidth=0.5)
-                ax.set_yticks(range(len(labels_a)))
-                ax.set_yticklabels(labels_a, fontsize=8)
-                ax.axvline(0, color="black", linewidth=0.8)
-                ax.axvline(HOTSPOT_DDG_THRESH, color="#e67e22", linewidth=1.4,
-                           linestyle="--")
-                ax.set_xlabel("ΔΔG upon Ala mutation (kcal/mol)", fontsize=11)
-                ax.set_title(
-                    f"Alanine Scanning — Replica {i+1} (eq {EQUIL[i]}ps)\n"
-                    "ΔΔG = ΔG(Ala mutant) − ΔG(WT) | positive = destabilising",
-                    fontsize=12, fontweight="bold")
-                ax.legend(handles=[
-                    mpatches.Patch(color="#e74c3c", label="MYC (PROA)"),
-                    mpatches.Patch(color="#3498db", label="MAX (PROB)"),
-                    mlines.Line2D([], [], color="#e67e22", linestyle="--",
-                                  label=f"Hotspot threshold ({HOTSPOT_DDG_THRESH} kcal/mol)")
-                ], fontsize=9)
-                ax.grid(axis="x", alpha=0.3)
-                plt.tight_layout()
-                out_path = f"{OUT}/06a_alascan_rep{i+1}.png"
-                plt.savefig(out_path, dpi=150)
-                plt.close()
-                print(f"  → Saved {out_path}")
-
-            # -----------------------------------------------------------------
-            # PLOT 6b — Consensus ΔΔG across all replicas
-            # -----------------------------------------------------------------
-            all_scan_res = set()
-            for d in alascan_results:
-                all_scan_res.update(d.keys())
-
-            consensus_ddg = {}
-            for res in all_scan_res:
-                vals = [d[res] for d in alascan_results if res in d]
-                if len(vals) >= max(1, len(alascan_results) - 1):
-                    consensus_ddg[res] = (np.mean(vals), np.std(vals))
-
-            if consensus_ddg:
-                sorted_ddg_c  = sorted(consensus_ddg.items(), key=lambda x: -x[1][0])
-                labels_c      = [r for r, _ in sorted_ddg_c]
-                means_ddg     = [v[0] for _, v in sorted_ddg_c]
-                stds_ddg      = [v[1] for _, v in sorted_ddg_c]
-                colors_cc     = ["#e74c3c" if label_residue(l)[1] == "MYC"
-                                 else "#3498db" if label_residue(l)[1] == "MAX"
-                                 else "#95a5a6" for l in labels_c]
-
-                fig, ax = plt.subplots(figsize=(12, 6))
-                ax.barh(range(len(labels_c)), means_ddg, xerr=stds_ddg,
-                        color=colors_cc, edgecolor="k", linewidth=0.5,
-                        error_kw={"elinewidth": 1.2, "capsize": 3})
-                ax.set_yticks(range(len(labels_c)))
-                ax.set_yticklabels(labels_c, fontsize=8)
-                ax.axvline(0, color="black", linewidth=0.8)
-                ax.axvline(HOTSPOT_DDG_THRESH, color="#e67e22", linewidth=1.4,
-                           linestyle="--")
-                ax.set_xlabel("Mean ΔΔG upon Ala mutation (kcal/mol)", fontsize=11)
-                ax.set_title(
-                    f"Consensus Alanine Scanning — All {len(alascan_results)} Replicas\n"
-                    f"error bars = std | dashed = hotspot threshold ({HOTSPOT_DDG_THRESH} kcal/mol)",
-                    fontsize=12, fontweight="bold")
-                ax.legend(handles=[
-                    mpatches.Patch(color="#e74c3c", label="MYC (PROA)"),
-                    mpatches.Patch(color="#3498db", label="MAX (PROB)")
-                ], fontsize=9)
-                ax.grid(axis="x", alpha=0.3)
-                plt.tight_layout()
-                plt.savefig(f"{OUT}/06b_alascan_consensus.png", dpi=150)
-                plt.close()
-                print(f"  → Saved {OUT}/06b_alascan_consensus.png")
-
-                # -------------------------------------------------------------
-                # PLOT 6c — MM-GBSA decomp vs Alanine Scan correlation
-                # -------------------------------------------------------------
-                common = [r for r in labels_c if r in consensus_scan]
-
-                if len(common) < 2:
-                    print("  ⚠ Fewer than 2 residues shared — skipping correlation plot")
-                else:
-                    mmgbsa_m  = np.array([consensus_scan[r][0] for r in common])
-                    alascan_m = np.array([consensus_ddg[r][0]  for r in common])
-                    mmgbsa_s  = np.array([consensus_scan[r][1] for r in common])
-                    alascan_s = np.array([consensus_ddg[r][1]  for r in common])
-
-                    mmgbsa_z  = zscore(mmgbsa_m)
-                    alascan_z = zscore(alascan_m)
-
-                    pearson_r,  pearson_p  = pearsonr(mmgbsa_m,  alascan_m)
-                    spearman_r, spearman_p = spearmanr(mmgbsa_m, alascan_m)
-
-                    x     = np.arange(len(common))
-                    width = 0.38
-                    fig, axes = plt.subplots(1, 2, figsize=(18, 7))
-
-                    ax1 = axes[0]
-                    ax1.barh(x - width/2, mmgbsa_z,  width, color="#2ecc71",
-                             edgecolor="k", linewidth=0.5, label="MM-GBSA decomp (z-score)")
-                    ax1.barh(x + width/2, alascan_z, width, color="#9b59b6",
-                             edgecolor="k", linewidth=0.5, label="Ala scan ΔΔG (z-score)")
-                    ax1.set_yticks(x)
-                    ax1.set_yticklabels(common, fontsize=8)
-                    ax1.axvline(0, color="black", linewidth=0.8)
-                    ax1.set_xlabel("Z-scored contribution (arbitrary units)", fontsize=11)
-                    ax1.set_title("MM-GBSA vs Alanine Scan\n(z-scored for visual rank comparison)",
-                                  fontsize=11, fontweight="bold")
-                    ax1.legend(fontsize=9)
-                    ax1.grid(axis="x", alpha=0.3)
-
-                    ax2 = axes[1]
-                    sc_colors = ["#e74c3c" if label_residue(l)[1] == "MYC"
-                                 else "#3498db" if label_residue(l)[1] == "MAX"
-                                 else "#95a5a6" for l in common]
-                    ax2.errorbar(mmgbsa_m, alascan_m, xerr=mmgbsa_s, yerr=alascan_s,
-                                 fmt="none", color="grey", alpha=0.4,
-                                 linewidth=0.8, capsize=2, zorder=1)
-                    ax2.scatter(mmgbsa_m, alascan_m, c=sc_colors,
-                                s=90, edgecolors="k", linewidth=0.5, zorder=3)
-                    for j, lbl in enumerate(common):
-                        ax2.annotate(lbl, (mmgbsa_m[j], alascan_m[j]),
-                                     fontsize=6, ha="left", va="bottom",
-                                     xytext=(3, 3), textcoords="offset points")
-                    m_fit, b_fit = np.polyfit(mmgbsa_m, alascan_m, 1)
-                    x_line = np.linspace(mmgbsa_m.min(), mmgbsa_m.max(), 100)
-                    ax2.plot(x_line, m_fit * x_line + b_fit, "k--", linewidth=1)
-                    ax2.axhline(HOTSPOT_DDG_THRESH, color="#e67e22", linewidth=1, linestyle=":")
-                    ax2.axvline(-1.0, color="#27ae60", linewidth=1, linestyle=":")
-                    ax2.set_xlabel("MM-GBSA per-residue ΔG (kcal/mol)", fontsize=11)
-                    ax2.set_ylabel("Alanine scan ΔΔG (kcal/mol)", fontsize=11)
-                    ax2.set_title(
-                        f"Correlation: MM-GBSA decomp vs Alanine Scan\n"
-                        f"Pearson r = {pearson_r:.3f} (p = {pearson_p:.2e})  |  "
-                        f"Spearman ρ = {spearman_r:.3f} (p = {spearman_p:.2e})",
-                        fontsize=10, fontweight="bold")
-                    ax2.legend(handles=[
-                        mpatches.Patch(color="#e74c3c", label="MYC (PROA)"),
-                        mpatches.Patch(color="#3498db", label="MAX (PROB)"),
-                        mlines.Line2D([], [], color="k",      linestyle="--", label="Linear fit"),
-                        mlines.Line2D([], [], color="#e67e22", linestyle=":", label="ΔΔG threshold"),
-                        mlines.Line2D([], [], color="#27ae60", linestyle=":", label="MM-GBSA threshold"),
-                    ], fontsize=8, loc="upper left")
-                    ax2.grid(alpha=0.3)
-                    plt.tight_layout()
-                    plt.savefig(f"{OUT}/06c_alascan_vs_mmgbsa.png", dpi=150)
-                    plt.close()
-                    print(f"  → Saved {OUT}/06c_alascan_vs_mmgbsa.png")
-
-                    print(f"\n  ── Correlation Summary ──")
-                    print(f"  Pearson  r  = {pearson_r:+.3f}  (p = {pearson_p:.3e})")
-                    print(f"  Spearman ρ  = {spearman_r:+.3f}  (p = {spearman_p:.3e})")
-                    if abs(pearson_r) > 0.7:
-                        print("  ✓ Strong agreement — MM-GBSA hotspot ranking well supported")
-                    elif abs(pearson_r) > 0.4:
-                        print("  ~ Moderate agreement — inspect outlier residues manually")
-                    else:
-                        print("  ⚠ Weak correlation — prioritise alanine scan results")
-
-                # -------------------------------------------------------------
-                # SUMMARY FILE — 06d_alascan_summary.txt
-                # -------------------------------------------------------------
-                summary_path = f"{OUT}/06d_alascan_summary.txt"
-                with open(summary_path, "w") as f:
-                    f.write("Alanine Scanning — Consensus ΔΔG Summary\n")
-                    f.write(f"MYC-MAX | Replicas: {len(alascan_results)} | igb=2, interval=50\n")
-                    f.write("ΔΔG = ΔG(Ala mutant) − ΔG(wild-type)\n")
-                    f.write(f"Hotspot criterion: ΔΔG ≥ {HOTSPOT_DDG_THRESH:.1f} kcal/mol\n")
-                    f.write("=" * 70 + "\n")
-                    f.write(f"{'Residue':<28} {'ΔΔG mean':>10} {'Std':>7} "
-                            f"{'Hotspot?':>10} {'MM-GBSA':>10} {'Protein':>8}\n")
-                    f.write("-" * 70 + "\n")
-                    for res, (mean_v, std_v) in sorted_ddg_c:
-                        _, prot = label_residue(res)
-                        flag    = "★ YES" if mean_v >= HOTSPOT_DDG_THRESH else "  no"
-                        mmg_str = f"{consensus_scan[res][0]:.2f}" if res in consensus_scan else ""
-                        f.write(f"{res:<28} {mean_v:>10.2f} {std_v:>7.2f} "
-                                f"{flag:>10} {mmg_str:>10} {prot:>8}\n")
-                    f.write("\n" + "=" * 70 + "\n")
-                    f.write("CONFIRMED HOTSPOTS (ΔΔG ≥ 2.0 AND MM-GBSA ≤ −1.0 kcal/mol)\n")
-                    f.write("-" * 70 + "\n")
-                    confirmed = [r for r, (v, _) in sorted_ddg_c
-                                 if v >= HOTSPOT_DDG_THRESH
-                                 and r in consensus_scan
-                                 and consensus_scan[r][0] <= -1.0]
-                    if confirmed:
-                        for r in confirmed:
-                            _, prot = label_residue(r)
-                            f.write(f"  ★ {r:<28}  ΔΔG={consensus_ddg[r][0]:+.2f}"
-                                    f"  MM-GBSA={consensus_scan[r][0]:.2f}  [{prot}]\n")
-                    else:
-                        f.write("  (none passed both criteria)\n")
-                print(f"  → Saved {summary_path}")
-
-            else:
-                print("  ✗ No consensus ΔΔG residues found across replicas")
 
 # =============================================================================
 # Summary
