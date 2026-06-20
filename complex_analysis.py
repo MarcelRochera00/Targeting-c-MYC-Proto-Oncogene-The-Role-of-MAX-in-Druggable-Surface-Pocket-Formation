@@ -287,15 +287,15 @@ startframe=1,
 interval=50,
 PBRadii=7,
 /
-&pb
-npbopt=1,        
-istrng=0.15,
-fillratio=4.0,
-radiopt=0,
+
+&gb
+igb=2,
+saltcon=0.150,
 /
+
 &decomp
-idecomp=2,
-dec_verbose=3,
+idecomp=1,
+dec_verbose=1,
 /
 """
 
@@ -640,7 +640,7 @@ if 3 in RUN:
     print(f"  Partial consensus (2/{len(TRAJS)} replicas):        {len(partial_bridges)}")
 
     # ---- Save text summary ----
-    sb_summary_path = f"{OUT}/05_salt_bridges_summary.txt"
+    sb_summary_path = f"{OUT}/3.0_salt_bridges_summary.txt"
     with open(sb_summary_path, "w") as f:
         f.write("Inter-chain Salt Bridge Occupancy — MYC-MAX\n")
         f.write(f"Distance cutoff: {SALT_DIST} Å | Occupancy threshold: {SALT_OCCUPANCY*100:.0f}%\n")
@@ -760,8 +760,8 @@ for f in sorted(os.listdir(OUT)):
     print(f"    {OUT}/{f}")
 print("="*60)
 print("\n  HOTSPOT CROSS-REFERENCE WORKFLOW:")
-print("  1. Open 04d_hotspots_summary.txt  → MM-GBSA energy hotspots")
-print("  2. Open 05_salt_bridges_summary.txt → persistent salt bridges")
+print("  1. Open 4.0_hotspots_summary.txt  → MM-GBSA energy hotspots")
+print("  2. Open 3.0_salt_bridges_summary.txt → persistent salt bridges")
 print("  3. Residues in BOTH lists = highest-confidence drug targets")
 print("="*60)
 print("="*60)

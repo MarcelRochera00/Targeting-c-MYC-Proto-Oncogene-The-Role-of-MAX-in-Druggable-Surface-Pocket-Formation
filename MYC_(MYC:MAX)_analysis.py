@@ -71,7 +71,6 @@ REPLICA_ALPHAS = [0.55, 0.45, 0.35]
 # ============================================================
 
 def compute_rmsd(u, ref):
-    print("RMSD atoms:", len(u.select_atoms("backbone")))
     rmsd_obj = rms.RMSD(
         u,
         ref,

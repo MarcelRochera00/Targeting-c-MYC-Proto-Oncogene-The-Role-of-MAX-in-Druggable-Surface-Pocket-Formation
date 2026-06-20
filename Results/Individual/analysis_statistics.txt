@@ -5,10 +5,8 @@ Replica 1
 --------------------
 RMSD mean = 13.998 Å
 RMSD std  = 2.875 Å
-
 Rg mean   = 21.606 Å
 Rg std    = 0.989 Å
-
 RMSF mean = 4.136 Å
 RMSF std  = 1.929 Å
 
@@ -16,10 +14,8 @@ Replica 2
 --------------------
 RMSD mean = 7.295 Å
 RMSD std  = 2.669 Å
-
 Rg mean   = 24.205 Å
 Rg std    = 1.493 Å
-
 RMSF mean = 4.070 Å
 RMSF std  = 1.879 Å
 
@@ -27,10 +23,8 @@ Replica 3
 --------------------
 RMSD mean = 11.677 Å
 RMSD std  = 3.154 Å
-
 Rg mean   = 22.737 Å
 Rg std    = 0.958 Å
-
 RMSF mean = 4.068 Å
 RMSF std  = 1.875 Å
 
