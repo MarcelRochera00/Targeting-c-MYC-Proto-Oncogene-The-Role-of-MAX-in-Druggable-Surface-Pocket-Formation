@@ -234,8 +234,10 @@ def residue_summary_table(dfs):
         name: df[AA_COLS].mean()
         for name, df in dfs.items()
     })
-    all_means["Mean (all replicas)"] = all_means.mean(axis=1)
-    all_means["Std (all replicas)"]  = all_means.std(axis=1)
+    replica_cols = list(dfs.keys())
+
+    all_means["Mean (all replicas)"] = all_means[replica_cols].mean(axis=1)
+    all_means["Std (all replicas)"] = all_means[replica_cols].std(axis=1)
     all_means["Property"] = [classify_aa(aa) for aa in all_means.index]
     all_means = all_means.sort_values("Mean (all replicas)", ascending=False)
 
