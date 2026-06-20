@@ -91,7 +91,7 @@ SALT_OCCUPANCY = 0.30  # only report bridges present in >30% of frames
 # =============================================================================
 
 os.makedirs(OUT, exist_ok=True)
-COLORS = ["#e74c3c", "#2ecc71", "#3498db"]
+COLORS = ["#8ecae6", "#f4a340","#c8a2d9"]
 
 def frames_to_ns(n_frames, ps_per_frame=50):
     return np.arange(n_frames) * ps_per_frame / 1000
@@ -236,7 +236,7 @@ if 1 in RUN:
         if all_contacts:
             min_len       = min(len(c) for c in all_contacts)
             mean_contacts = np.mean([c[:min_len] for c in all_contacts], axis=0)
-            ax.plot(frames_to_ns(min_len), mean_contacts, color="#1d3557", linewidth=1.8,
+            ax.plot(frames_to_ns(min_len), mean_contacts, color="#2b2d42", linewidth=1.5,
                     linestyle="--", label="Mean across replicas", zorder=5)
 
         ax.set_xlabel("Time (ns)", fontsize=11)
@@ -705,7 +705,7 @@ if 3 in RUN:
         stds_b    = [np.std(v["occupancies"])  for _, v in sorted_b]
         # Colour by direction: MYC→MAX = orange, MAX→MYC = purple
         bar_colors = [
-            "#e67e22" if v["direction"] == "MYC→MAX" else "#8e44ad"
+            "#e67e22" if v["direction"] == "MYC→MAX" else "#3498db"
             for _, v in sorted_b
         ]
 
@@ -722,7 +722,7 @@ if 3 in RUN:
         ax.set_title(title, fontsize=12, fontweight="bold")
         ax.legend(handles=[
             mpatches.Patch(color="#e67e22", label="MYC(+) → MAX(-)"),
-            mpatches.Patch(color="#8e44ad", label="MAX(+) → MYC(-)"),
+            mpatches.Patch(color="#3498db", label="MAX(+) → MYC(-)"),
             mpatches.Patch(color="red",     label=f"Threshold ({SALT_OCCUPANCY*100:.0f}%)",
                            linestyle="--", fill=False),
         ], fontsize=9)
