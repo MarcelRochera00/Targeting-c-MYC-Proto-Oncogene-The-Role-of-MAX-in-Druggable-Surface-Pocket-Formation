@@ -23,7 +23,7 @@ REPLICA_FILES = {
     "Replica 3 (1500 ns eq)": "MYC-MAX/MYC-MAX-1500/charmm-gui/gromacs/mdpocket_pocket1_stats_descriptors.txt",
 }
 
-TIMESTEP_NS = 0.1   # ns per snapshot (change if your dt is different)
+TIMESTEP_NS = 0.05   # ns per snapshot (change if your dt is different)
 OUTPUT_DIR  = "Results/Pockets"
 # ─────────────────────────────────────────────
 

@@ -1,7 +1,8 @@
 load /home/marcel/Desktop/Project1/crystal_proteins.pdb, prot
 hide everything, prot
 show cartoon, prot
-color gray80, prot
+color salmon, protein and chain A     # MYC: Rojo apagado/salmón
+color grey80, protein and chain B      # MAX: Gris azulado elegante
 set cartoon_transparency, 0.5
 select score3, none
 show sticks, score3

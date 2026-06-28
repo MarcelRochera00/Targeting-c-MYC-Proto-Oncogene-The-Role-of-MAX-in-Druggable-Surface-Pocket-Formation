@@ -1,16 +1,18 @@
-# MYC-MAX Sub-pocket Visualization
-# Run: pymol mdpocket_analysis/visualize_subpockets.pml
-
 # ── Estructura ──────────────────────────────
-load /home/marcel/Project1/MYC-MAX/MYC-MAX-500/charmm-gui/gromacs/rep1_frame250_protein.pdb, protein
+load /home/marcel/Desktop/Project1/MYC-MAX/MYC-MAX-500/charmm-gui/gromacs/rep1_frame250_protein.pdb, protein
 hide everything
 show cartoon, protein
-color grey80, protein
-set cartoon_transparency, 0.3
-bg_color white
+
+# Colores sólidos y opacos para las cadenas
+color salmon, protein and chain A     # MYC: Rojo apagado/salmón
+color grey80, protein and chain B      # MAX: Gris azulado elegante
+
+# Eliminada la transparencia (fijada en 0 para total opacidad)
+set cartoon_transparency, 0.0
+bg_color grey95
 
 # ── Pocket surface (frecuencia >25%) ────────
-load /home/marcel/Project1/MYC-MAX/MYC-MAX-500/charmm-gui/gromacs/mdpocket_correct_freq.dx, freq_map
+load /home/marcel/Desktop/Project1/MYC-MAX/MYC-MAX-500/charmm-gui/gromacs/mdpocket_correct_freq.dx, freq_map
 isosurface pocket_surface, freq_map, 0.25
 color tv_blue, pocket_surface
 set transparency, 0.5, pocket_surface
@@ -34,9 +36,7 @@ color magenta, SP3
 set stick_radius, 0.25, SP3
 
 # ── Labels ─────────────────────────────────
-label (SP1 or SP2 or SP3) and name CA, "%s%s" % (resn, resi)
-set label_size, 12
-set label_color, black
+# Sección eliminada para limpiar la vista
 
 # ── Vista final ─────────────────────────────
 zoom SP1 or SP2 or SP3
